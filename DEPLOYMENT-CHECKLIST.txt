@@ -1,0 +1,17 @@
+TRADERS HUB QUICK CHECKLIST
+
+1. Keep this project folder.
+2. Create a GitHub repository and upload the files.
+3. Deploy the repository as a Node web service on Render (or another HTTPS Node host).
+4. Wait for the host URL, e.g. https://traders-hub-xxxx.onrender.com
+5. Set DERIV_REDIRECT_URI to:
+   https://traders-hub-xxxx.onrender.com/callback
+6. Put that exact same URL into the Deriv Registered App Redirect URLs field.
+7. Set DERIV_CLIENT_ID to the App ID Deriv gives you.
+8. Redeploy.
+9. Open the HTTPS app URL.
+10. Press LOGIN WITH DERIV.
+11. Select a DEMO account.
+12. Test proposals/buys before considering any real account.
+
+Never send passwords, OAuth tokens, client secrets, or SESSION_SECRET to anyone.
