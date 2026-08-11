@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
 const crypto = require("crypto");
+const fs = require("fs");
 const path = require("path");
 
 const app = express();
@@ -10,6 +11,10 @@ const PORT = Number(process.env.PORT || 3000);
 const DERIV_CLIENT_ID = process.env.DERIV_CLIENT_ID || "";
 const DERIV_REDIRECT_URI = process.env.DERIV_REDIRECT_URI || "";
 const SESSION_SECRET = process.env.SESSION_SECRET || "change-me-in-production";
+
+if (process.env.NODE_ENV === "production" && SESSION_SECRET === "change-me-in-production") {
+  console.warn("WARNING: SESSION_SECRET is using the development default.");
+}
 
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "100kb" }));
@@ -30,7 +35,44 @@ app.use(
   })
 );
 
-app.use(express.static(path.join(__dirname, "public")));
+const PUBLIC_DIR = path.join(__dirname, "public");
+
+function sendIndex(res) {
+  let html = fs.readFileSync(path.join(PUBLIC_DIR, "index.html"), "utf8");
+
+  // Fix the accidental CSS text that was placed between </head> and <body>.
+  html = html.replace(
+    /\s*\.hidden\s*\{\s*display:\s*none\s*!important;\s*\}\s*(?=<body>)/,
+    "\n"
+  );
+
+  // Load the compatibility market layer after the existing app.js.
+  if (!html.includes('src="/market-fix.js"')) {
+    html = html.replace(
+      /<\/body>/i,
+      '  <script src="/market-fix.js"></script>\n</body>'
+    );
+  }
+
+  res.type("html").send(html);
+}
+
+// The existing app.js/style.css live in the repository root.
+// Expose them explicitly because Express static only serves /public.
+app.get("/app.js", (_req, res) => {
+  res.sendFile(path.join(__dirname, "app.js"));
+});
+
+app.get("/style.css", (_req, res) => {
+  res.sendFile(path.join(__dirname, "style.css"));
+});
+
+app.get("/market-fix.js", (_req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "market-fix.js"));
+});
+
+app.get("/", (_req, res) => sendIndex(res));
+app.use(express.static(PUBLIC_DIR));
 
 function base64url(buffer) {
   return buffer
@@ -131,11 +173,15 @@ app.get("/callback", async (req, res) => {
 
     if (!tokenResponse.ok || !tokenData.access_token) {
       console.error("OAuth token exchange failed:", tokenData);
-      return res.status(502).send("Deriv did not return an access token. Check your App ID and Redirect URL.");
+      return res
+        .status(502)
+        .send("Deriv did not return an access token. Check your App ID and Redirect URL.");
     }
 
     req.session.accessToken = tokenData.access_token;
-    req.session.expiresAt = Date.now() + Number(tokenData.expires_in || 3600) * 1000;
+    req.session.expiresAt =
+      Date.now() + Number(tokenData.expires_in || 3600) * 1000;
+
     delete req.session.oauthState;
     delete req.session.codeVerifier;
 
@@ -216,11 +262,25 @@ app.post("/api/ws-url", requireAuth, async (req, res) => {
   }
 });
 
+// SPA fallback, while keeping API/auth routes untouched.
 app.get("*", (req, res, next) => {
-  if (req.path.startsWith("/api/") || req.path.startsWith("/auth/") || req.path === "/callback" || req.path === "/health") {
+  if (
+    req.path.startsWith("/api/") ||
+    req.path.startsWith("/auth/") ||
+    req.path === "/callback" ||
+    req.path === "/health" ||
+    req.path === "/app.js" ||
+    req.path === "/style.css" ||
+    req.path === "/market-fix.js"
+  ) {
     return next();
   }
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+
+  if (req.accepts("html")) {
+    return sendIndex(res);
+  }
+
+  next();
 });
 
 app.listen(PORT, () => {
