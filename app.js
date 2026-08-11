@@ -990,7 +990,7 @@ function connectPublicMarket() {
   const symbol = state.symbol || "1HZ100V";
 
   const ws = new WebSocket(
-    "wss://ws.binaryws.com/websockets/v3?app_id=1089"
+    "wss://ws.derivws.com/websockets/v3?app_id=1089"
   );
 
   marketWS = ws;
