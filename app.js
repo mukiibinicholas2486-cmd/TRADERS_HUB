@@ -3,411 +3,935 @@ const $ = (id) => document.getElementById(id);
 const state = {
   publicWs: null,
   authWs: null,
+
   symbol: "1HZ100V",
+
   prices: [],
+  digits: [],
+
   previous: null,
+
   proposal: null,
   contractId: null,
+
   account: null,
-  accounts: []
+  accounts: [],
+
+  bot: {
+    threshold: 4,
+    window: 100,
+    minimumSamples: 30
+  }
 };
 
+
 function log(message, data) {
-  const line = `[${new Date().toLocaleTimeString()}] ${message}`;
-  $("log").textContent = `${line}${data ? "\n" + JSON.stringify(data, null, 2) : ""}\n` + $("log").textContent;
+  const line =
+    `[${new Date().toLocaleTimeString()}] ${message}`;
+
+  const extra = data
+    ? "\n" + JSON.stringify(data, null, 2)
+    : "";
+
+  const box = $("log");
+
+  if (box) {
+    box.textContent =
+      `${line}${extra}\n${box.textContent}`;
+  }
 }
+
 
 function setStatus(online, text) {
-  $("connectionDot").className = `status-dot ${online ? "online" : "offline"}`;
-  $("connectionText").textContent = text;
+
+  const dot = $("connectionDot");
+  const label = $("connectionText");
+
+  if (dot) {
+    dot.className =
+      `status-dot ${online ? "online" : "offline"}`;
+  }
+
+  if (label) {
+    label.textContent = text;
+  }
 }
 
+
 function money(value, currency = "") {
-  if (value === undefined || value === null || Number.isNaN(Number(value))) return "—";
+
+  if (
+    value === undefined ||
+    value === null ||
+    Number.isNaN(Number(value))
+  ) {
+    return "—";
+  }
+
   return `${currency ? currency + " " : ""}${Number(value).toFixed(2)}`;
 }
 
-function drawChart() {
-  const canvas = $("chart");
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-  canvas.height = Math.max(1, Math.floor(260 * dpr));
-  const ctx = canvas.getContext("2d");
-  ctx.scale(dpr, dpr);
-  const w = rect.width, h = 260;
 
-  ctx.clearRect(0, 0, w, h);
-  ctx.strokeStyle = "#202735";
-  ctx.lineWidth = 1;
-  for (let i = 1; i < 5; i++) {
-    const y = (h / 5) * i;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+function lastDigitFromPrice(price) {
+
+  if (
+    price === undefined ||
+    price === null ||
+    !Number.isFinite(Number(price))
+  ) {
+    return null;
   }
 
-  if (state.prices.length < 2) return;
-  const min = Math.min(...state.prices), max = Math.max(...state.prices);
-  const range = max - min || 1;
+  const text = String(price);
+
+  const digits = text.replace(/\D/g, "");
+
+  if (!digits.length) return null;
+
+  return Number(digits[digits.length - 1]);
+}
+
+
+function drawChart() {
+
+  const canvas = $("chart");
+
+  if (!canvas) return;
+
+  const rect =
+    canvas.getBoundingClientRect();
+
+  const dpr =
+    window.devicePixelRatio || 1;
+
+  const width =
+    Math.max(1, rect.width);
+
+  const height = 260;
+
+  canvas.width =
+    Math.floor(width * dpr);
+
+  canvas.height =
+    Math.floor(height * dpr);
+
+  const ctx =
+    canvas.getContext("2d");
+
+  ctx.setTransform(
+    dpr,
+    0,
+    0,
+    dpr,
+    0,
+    0
+  );
+
+  ctx.clearRect(
+    0,
+    0,
+    width,
+    height
+  );
+
+  ctx.strokeStyle = "#202735";
+  ctx.lineWidth = 1;
+
+  for (let i = 1; i < 5; i++) {
+
+    const y =
+      (height / 5) * i;
+
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+  }
+
+  if (state.prices.length < 2) {
+    return;
+  }
+
+  const min =
+    Math.min(...state.prices);
+
+  const max =
+    Math.max(...state.prices);
+
+  const range =
+    max - min || 1;
+
   ctx.strokeStyle = "#ff3d69";
   ctx.lineWidth = 2;
+
   ctx.beginPath();
 
-  state.prices.forEach((p, i) => {
-    const x = (i / (state.prices.length - 1)) * w;
-    const y = h - ((p - min) / range) * (h - 24) - 12;
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  state.prices.forEach((price, index) => {
+
+    const x =
+      (index / (state.prices.length - 1)) *
+      width;
+
+    const y =
+      height -
+      ((price - min) / range) *
+      (height - 24) -
+      12;
+
+    if (index === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+
   });
+
   ctx.stroke();
 }
 
-function connectPublicMarket() {
-  if (state.publicWs) {
-    try { state.publicWs.close(); } catch {}
-  }
 
-  setStatus(false, "Connecting market…");
-  const ws = new WebSocket("wss://api.derivws.com/trading/v1/options/ws/public");
-  state.publicWs = ws;
+function updateLastDigit(price) {
 
-  ws.onopen = () => {
-    setStatus(true, "Market live");
-    log("Public market connected.");
-    ws.send(JSON.stringify({
-      ticks_history: state.symbol,
-      end: "latest",
-      count: 80,
-      style: "ticks",
-      subscribe: 0,
-      req_id: 1
-    }));
-    ws.send(JSON.stringify({
-      ticks: state.symbol,
-      subscribe: 1,
-      req_id: 2
-    }));
-  };
+  const digit =
+    lastDigitFromPrice(price);
 
-  ws.onmessage = (event) => {
-    let data;
-    try { data = JSON.parse(event.data); } catch { return; }
+  if (digit === null) return;
 
-    if (data.error) {
-      log("Market error", data.error);
-      return;
-    }
+  state.digits.push(digit);
 
-    if (data.msg_type === "history" && data.history?.prices) {
-      state.prices = data.history.prices.map(Number).slice(-100);
-      drawChart();
-    }
+  state.digits =
+    state.digits.slice(-state.bot.window);
 
-    if (data.msg_type === "tick" && data.tick) {
-      const quote = Number(data.tick.quote);
-      state.previous = state.prices.length ? state.prices[state.prices.length - 1] : quote;
-      state.prices.push(quote);
-      state.prices = state.prices.slice(-100);
+  const element =
+    $("lastDigit");
 
-      $("price").textContent = quote;
-      $("lastTick").textContent = new Date(Number(data.tick.epoch) * 1000).toLocaleTimeString();
-      const diff = quote - state.previous;
-      const change = $("priceChange");
-      change.className = `change ${diff > 0 ? "up" : diff < 0 ? "down" : "neutral"}`;
-      change.textContent = diff > 0 ? "UP" : diff < 0 ? "DOWN" : "FLAT";
-      drawChart();
-    }
-  };
-
-  ws.onerror = () => {
-    setStatus(false, "Market connection error");
-  };
-
-  ws.onclose = () => {
-    setStatus(false, "Market disconnected");
-    setTimeout(() => connectPublicMarket(), 3000);
-  };
-}
-
-async function getAuthStatus() {
-  const r = await fetch("/api/auth/status");
-  return r.json();
-}
-
-async function loadAccounts() {
-  const response = await fetch("/api/accounts");
-  const data = await response.json();
-
-  if (!response.ok) throw new Error(data?.errors?.[0]?.message || data.error || "Could not load accounts.");
-
-  state.accounts = Array.isArray(data.data) ? data.data : [];
-  const select = $("accountSelect");
-  select.innerHTML = "";
-
-  if (!state.accounts.length) {
-    select.innerHTML = "<option>No Options account found</option>";
-    return;
-  }
-
-  state.accounts.forEach((a) => {
-    const option = document.createElement("option");
-    option.value = a.account_id;
-    option.textContent = `${a.account_id} • ${a.account_type || "account"} • ${a.currency || "USD"}`;
-    select.appendChild(option);
-  });
-
-  select.disabled = false;
-  state.account = state.accounts[0];
-  updateAccountUI();
-  await connectAuthenticated();
-}
-
-function updateAccountUI() {
-  if (!state.account) return;
-  $("accountBadge").textContent = state.account.account_type === "demo" ? "DEMO" : "REAL";
-  $("accountBadge").className = `badge ${state.account.account_type === "demo" ? "good" : ""}`;
-  $("balance").textContent = money(state.account.balance, state.account.currency);
-  $("currency").textContent = state.account.currency || "—";
-}
-
-async function connectAuthenticated() {
-  if (!state.account) return;
-
-  if (state.authWs) {
-    try { state.authWs.close(); } catch {}
-  }
-
-  const response = await fetch("/api/ws-url", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({accountId: state.account.account_id})
-  });
-  const data = await response.json();
-
-  if (!response.ok || !data.url) {
-    throw new Error(data?.errors?.[0]?.message || data.error || "Could not authenticate trading WebSocket.");
-  }
-
-  const ws = new WebSocket(data.url);
-  state.authWs = ws;
-
-  ws.onopen = () => {
-    log(`Authenticated ${state.account.account_type} WebSocket connected.`);
-    enableTrading(true);
-    ws.send(JSON.stringify({balance: 1, subscribe: 1, req_id: 100}));
-    ws.send(JSON.stringify({portfolio: 1, req_id: 101}));
-  };
-
-  ws.onmessage = (event) => {
-    let msg;
-    try { msg = JSON.parse(event.data); } catch { return; }
-
-    if (msg.error) {
-      log("Trading API error", msg.error);
-      return;
-    }
-
-    if (msg.msg_type === "balance" && msg.balance) {
-      $("balance").textContent = money(msg.balance.balance, msg.balance.currency);
-      if (state.account) {
-        state.account.balance = msg.balance.balance;
-        state.account.currency = msg.balance.currency;
-      }
-    }
-
-    if (msg.msg_type === "proposal" && msg.proposal) {
-      state.proposal = msg.proposal;
-      $("proposalId").textContent = msg.proposal.id || "—";
-      $("askPrice").textContent = money(msg.proposal.ask_price, state.account?.currency);
-      $("payout").textContent = money(msg.proposal.payout, state.account?.currency);
-      $("buyBtn").disabled = !msg.proposal.id;
-      log("Live proposal received.", {
-        id: msg.proposal.id,
-        ask_price: msg.proposal.ask_price,
-        payout: msg.proposal.payout
-      });
-    }
-
-    if (msg.msg_type === "buy" && msg.buy) {
-      state.contractId = msg.buy.contract_id;
-      $("contractId").textContent = state.contractId;
-      $("contractBuyPrice").textContent = money(msg.buy.buy_price, state.account?.currency);
-      $("positionEmpty").classList.add("hidden");
-      $("position").classList.remove("hidden");
-      $("sellBtn").disabled = false;
-      log("Contract purchased.", msg.buy);
-      ws.send(JSON.stringify({
-        proposal_open_contract: 1,
-        contract_id: state.contractId,
-        subscribe: 1,
-        req_id: 300
-      }));
-    }
-
-    if (msg.msg_type === "proposal_open_contract" && msg.proposal_open_contract) {
-      const c = msg.proposal_open_contract;
-      $("contractStatus").textContent = c.status || (c.is_sold ? "sold" : "open");
-      $("contractProfit").textContent = money(c.profit, state.account?.currency);
-      if (c.is_sold) {
-        $("sellBtn").disabled = true;
-        log("Contract closed.", c);
-      }
-    }
-
-    if (msg.msg_type === "portfolio" && msg.portfolio) {
-      const contracts = msg.portfolio.contracts || [];
-      if (contracts.length && !state.contractId) {
-        state.contractId = contracts[0].contract_id;
-        $("contractId").textContent = state.contractId;
-      }
-    }
-  };
-
-  ws.onerror = () => log("Authenticated WebSocket error.");
-  ws.onclose = () => {
-    enableTrading(false);
-    log("Authenticated WebSocket closed.");
-  };
-}
-
-function enableTrading(enabled) {
-  $("quoteBtn").disabled = !enabled;
-  $("refreshBtn").disabled = !enabled;
-}
-
-function requestProposal() {
-  if (!state.authWs || state.authWs.readyState !== WebSocket.OPEN) {
-    alert("Login and select an account first.");
-    return;
-  }
-
-  const amount = Number($("stake").value);
-  const duration = Number($("duration").value);
-  const durationUnit = $("durationUnit").value;
-  const contractType = $("contractType").value;
-
-  if (!amount || amount <= 0 || !duration || duration <= 0) {
-    alert("Enter a valid stake and duration.");
-    return;
-  }
-
-  state.proposal = null;
-  $("proposalId").textContent = "REQUESTING…";
-  $("askPrice").textContent = "—";
-  $("payout").textContent = "—";
-  $("buyBtn").disabled = true;
-
-  state.authWs.send(JSON.stringify({
-    proposal: 1,
-    amount,
-    basis: "stake",
-    contract_type: contractType,
-    currency: state.account.currency,
-    duration_unit: durationUnit,
-    duration,
-    underlying_symbol: state.symbol,
-    subscribe: 0,
-    req_id: 200
-  }));
-}
-
-function buyProposal() {
-  if (!state.proposal?.id || !state.authWs || state.authWs.readyState !== WebSocket.OPEN) return;
-
-  const price = Number(state.proposal.ask_price);
-  if (!price || price <= 0) return;
-
-  if (state.account?.account_type !== "demo") {
-    const ok = confirm("This is NOT a demo account. Buying can place a real-money trade. Continue?");
-    if (!ok) return;
-  }
-
-  state.authWs.send(JSON.stringify({
-    buy: String(state.proposal.id),
-    price,
-    req_id: 250
-  }));
-  $("buyBtn").disabled = true;
-}
-
-function sellOpen() {
-  if (!state.contractId || !state.authWs || state.authWs.readyState !== WebSocket.OPEN) return;
-  const ok = confirm("Sell the open contract at market price?");
-  if (!ok) return;
-  state.authWs.send(JSON.stringify({
-    sell: Number(state.contractId),
-    price: 0,
-    req_id: 400
-  }));
-}
-
-async function initAuthUI() {
-  const status = await getAuthStatus();
-  if (status.authenticated) {
-    $("loginBtn").classList.add("hidden");
-    $("logoutBtn").classList.remove("hidden");
-    try {
-      await loadAccounts();
-      log("Deriv login session is active.");
-    } catch (err) {
-      log("Could not load accounts: " + err.message);
-    }
-  } else {
-    $("loginBtn").classList.remove("hidden");
-    $("logoutBtn").classList.add("hidden");
-    enableTrading(false);
+  if (element) {
+    element.textContent = digit;
   }
 }
 
-$("loginBtn").onclick = () => {
-  window.location.href = "/auth/login";
-};
 
-$("logoutBtn").onclick = async () => {
-  await fetch("/auth/logout", {method: "POST"});
-  location.reload();
-};
+function updatePriceUI(quote, epoch) {
 
-$("accountSelect").onchange = async (e) => {
-  state.account = state.accounts.find(a => a.account_id === e.target.value);
-  state.contractId = null;
-  $("position").classList.add("hidden");
-  $("positionEmpty").classList.remove("hidden");
-  $("sellBtn").disabled = true;
-  updateAccountUI();
-  try {
-    await connectAuthenticated();
-  } catch (err) {
-    log("Account connection failed: " + err.message);
+  const price =
+    $("price");
+
+  const lastTick =
+    $("lastTick");
+
+  const change =
+    $("priceChange");
+
+  if (price) {
+    price.textContent = quote;
   }
-};
 
-$("symbolSelect").onchange = (e) => {
-  state.symbol = e.target.value;
-  $("symbolCode").textContent = state.symbol;
-  $("symbolName").textContent = e.target.options[e.target.selectedIndex].textContent;
+  if (lastTick && epoch) {
+
+    lastTick.textContent =
+      new Date(
+        Number(epoch) * 1000
+      ).toLocaleTimeString();
+
+  }
+
+  const previous =
+    state.previous;
+
+  if (previous !== null && change) {
+
+    const diff =
+      quote - previous;
+
+    change.className =
+      `change ${
+        diff > 0
+          ? "up"
+          : diff < 0
+          ? "down"
+          : "neutral"
+      }`;
+
+    change.textContent =
+      diff > 0
+        ? "UP"
+        : diff < 0
+        ? "DOWN"
+        : "FLAT";
+  }
+
+  state.previous = quote;
+}
+
+
+function resetMarketData() {
+
   state.prices = [];
+  state.digits = [];
   state.previous = null;
-  connectPublicMarket();
-};
 
-$("quoteBtn").onclick = requestProposal;
-$("buyBtn").onclick = buyProposal;
-$("sellBtn").onclick = sellOpen;
+  const price =
+    $("price");
 
-$("refreshBtn").onclick = async () => {
-  if (state.account) await connectAuthenticated();
-};
+  const lastDigit =
+    $("lastDigit");
 
-document.querySelectorAll("[data-step]").forEach((button) => {
-  button.onclick = () => {
-    const input = $("stake");
-    const next = Math.max(0.35, Number(input.value) + Number(button.dataset.step) * 0.5);
-    input.value = next.toFixed(2);
+  const change =
+    $("priceChange");
+
+  if (price) price.textContent = "—";
+
+  if (lastDigit) lastDigit.textContent = "—";
+
+  if (change) {
+    change.className =
+      "change neutral";
+
+    change.textContent =
+      "WAITING";
+  }
+
+  drawChart();
+      }function setBotText(id, text) {
+  const el = $(id);
+  if (el) el.textContent = text;
+}
+
+
+function setSignal(id, type, text) {
+  const el = $(id);
+
+  if (!el) return;
+
+  el.className = `signal ${type}`;
+  el.textContent = text;
+}
+
+
+function percentage(value) {
+  if (!Number.isFinite(value)) return "—";
+  return `${value.toFixed(1)}%`;
+}
+
+
+/*
+  DIGIT PREDICTION ENGINE
+
+  This uses recent tick history and a simple
+  rolling out-of-sample test.
+
+  It does NOT guarantee 80% accuracy.
+
+  A signal is only labelled HIGH CONFIDENCE
+  when the measured historical accuracy is
+  >= 80% and there are enough samples.
+*/
+
+
+function calculateDigitStats() {
+
+  const digits = state.digits.slice();
+
+  const result = {
+    match: null,
+    even: null,
+    over: null
   };
-});
 
-$("clearLog").onclick = () => $("log").textContent = "";
+  if (digits.length < state.bot.minimumSamples) {
+    return result;
+  }
 
-window.addEventListener("resize", drawChart);
 
-connectPublicMarket();
-initAuthUI();
+  /*
+    MATCHES
+
+    Predict the most frequently occurring digit
+    in the recent training window.
+
+    Then test that prediction against the
+    following digit.
+  */
+
+  const matchWindow =
+    Math.min(60, digits.length - 1);
+
+  const matchTraining =
+    digits.slice(-matchWindow - 1, -1);
+
+  const counts =
+    Array(10).fill(0);
+
+  matchTraining.forEach(d => {
+    counts[d]++;
+  });
+
+  let matchDigit = 0;
+
+  for (let i = 1; i < 10; i++) {
+    if (counts[i] > counts[matchDigit]) {
+      matchDigit = i;
+    }
+  }
+
+  let matchWins = 0;
+  let matchSamples = 0;
+
+  const matchStart =
+    Math.max(
+      1,
+      digits.length - matchWindow
+    );
+
+  for (
+    let i = matchStart;
+    i < digits.length;
+    i++
+  ) {
+
+    const train =
+      digits.slice(
+        Math.max(0, i - matchWindow),
+        i
+      );
+
+    if (!train.length) continue;
+
+    const localCounts =
+      Array(10).fill(0);
+
+    train.forEach(d => {
+      localCounts[d]++;
+    });
+
+    let prediction = 0;
+
+    for (let d = 1; d < 10; d++) {
+      if (localCounts[d] > localCounts[prediction]) {
+        prediction = d;
+      }
+    }
+
+    if (digits[i] === prediction) {
+      matchWins++;
+    }
+
+    matchSamples++;
+  }
+
+  result.match = {
+    digit: matchDigit,
+    wins: matchWins,
+    samples: matchSamples,
+    accuracy:
+      matchSamples
+        ? (matchWins / matchSamples) * 100
+        : 0
+  };
+
+
+  /*
+    EVEN
+
+    Predict EVEN or ODD from the historical
+    majority of the previous digits.
+  */
+
+  let evenWins = 0;
+  let evenSamples = 0;
+
+  const parityWindow = 60;
+
+  const parityStart =
+    Math.max(
+      1,
+      digits.length - parityWindow
+    );
+
+  for (
+    let i = parityStart;
+    i < digits.length;
+    i++
+  ) {
+
+    const train =
+      digits.slice(
+        Math.max(0, i - parityWindow),
+        i
+      );
+
+    if (!train.length) continue;
+
+    let evens = 0;
+    let odds = 0;
+
+    train.forEach(d => {
+      if (d % 2 === 0) {
+        evens++;
+      } else {
+        odds++;
+      }
+    });
+
+    const prediction =
+      evens >= odds
+        ? "EVEN"
+        : "ODD";
+
+    const actual =
+      digits[i] % 2 === 0
+        ? "EVEN"
+        : "ODD";
+
+    if (prediction === actual) {
+      evenWins++;
+    }
+
+    evenSamples++;
+  }
+
+  const currentTraining =
+    digits.slice(-parityWindow);
+
+  let currentEvens = 0;
+  let currentOdds = 0;
+
+  currentTraining.forEach(d => {
+
+    if (d % 2 === 0) {
+      currentEvens++;
+    } else {
+      currentOdds++;
+    }
+
+  });
+
+  result.even = {
+    prediction:
+      currentEvens >= currentOdds
+        ? "EVEN"
+        : "ODD",
+
+    wins: evenWins,
+
+    samples: evenSamples,
+
+    accuracy:
+      evenSamples
+        ? (evenWins / evenSamples) * 100
+        : 0
+  };
+
+
+  /*
+    OVER / UNDER
+
+    Uses the threshold selected by the user.
+  */
+
+  const threshold =
+    Number(
+      $("botThreshold")?.value ?? 4
+    );
+
+  let ouWins = 0;
+  let ouSamples = 0;
+
+  const ouWindow = 60;
+
+  const ouStart =
+    Math.max(
+      1,
+      digits.length - ouWindow
+    );
+
+  for (
+    let i = ouStart;
+    i < digits.length;
+    i++
+  ) {
+
+    const train =
+      digits.slice(
+        Math.max(0, i - ouWindow),
+        i
+      );
+
+    if (!train.length) continue;
+
+    let over = 0;
+    let under = 0;
+
+    train.forEach(d => {
+
+      if (d > threshold) {
+        over++;
+      } else {
+        under++;
+      }
+
+    });
+
+    const prediction =
+      over >= under
+        ? "OVER"
+        : "UNDER";
+
+    const actual =
+      digits[i] > threshold
+        ? "OVER"
+        : "UNDER";
+
+    if (prediction === actual) {
+      ouWins++;
+    }
+
+    ouSamples++;
+  }
+
+  let currentOver = 0;
+  let currentUnder = 0;
+
+  digits
+    .slice(-ouWindow)
+    .forEach(d => {
+
+      if (d > threshold) {
+        currentOver++;
+      } else {
+        currentUnder++;
+      }
+
+    });
+
+  result.over = {
+
+    threshold,
+
+    prediction:
+      currentOver >= currentUnder
+        ? "OVER"
+        : "UNDER",
+
+    wins: ouWins,
+
+    samples: ouSamples,
+
+    accuracy:
+      ouSamples
+        ? (ouWins / ouSamples) * 100
+        : 0
+  };
+
+
+  return result;
+}
+
+
+function updatePredictionBot() {
+
+  const stats =
+    calculateDigitStats();
+
+  if (!stats.match ||
+      !stats.even ||
+      !stats.over) {
+
+    setBotText(
+      "dataQuality",
+      `Collecting ticks… ${state.digits.length}/${state.bot.minimumSamples}`
+    );
+
+    setBotText(
+      "filterStatus",
+      "WAITING FOR DATA"
+    );
+
+    setSignal(
+      "matchSignal",
+      "neutral",
+      "WAITING"
+    );
+
+    setSignal(
+      "evenSignal",
+      "neutral",
+      "WAITING"
+    );
+
+    setSignal(
+      "ouSignal",
+      "neutral",
+      "WAITING"
+    );
+
+    setBotText(
+      "matchConf",
+      "Need more ticks"
+    );
+
+    setBotText(
+      "evenConf",
+      "Need more ticks"
+    );
+
+    setBotText(
+      "ouConf",
+      "Need more ticks"
+    );
+
+    return;
+  }
+
+
+  /*
+    MATCH DISPLAY
+  */
+
+  setBotText(
+    "matchAcc",
+    percentage(stats.match.accuracy)
+  );
+
+  setBotText(
+    "matchWins",
+    stats.match.wins
+  );
+
+  setBotText(
+    "matchSamples",
+    stats.match.samples
+  );
+
+
+  const matchHigh =
+    stats.match.accuracy >= 80 &&
+    stats.match.samples >= state.bot.minimumSamples;
+
+  setSignal(
+    "matchSignal",
+    matchHigh ? "good" : "neutral",
+    matchHigh
+      ? `MATCH ${stats.match.digit}`
+      : `MATCH ${stats.match.digit} — LOW CONFIDENCE`
+  );
+
+  setBotText(
+    "matchConf",
+    matchHigh
+      ? "HIGH CONFIDENCE"
+      : "Below 80% historical accuracy"
+  );
+
+
+  /*
+    EVEN DISPLAY
+  */
+
+  setBotText(
+    "evenAcc",
+    percentage(stats.even.accuracy)
+  );
+
+  setBotText(
+    "evenWins",
+    stats.even.wins
+  );
+
+  setBotText(
+    "evenSamples",
+    stats.even.samples
+  );
+
+
+  const evenHigh =
+    stats.even.accuracy >= 80 &&
+    stats.even.samples >= state.bot.minimumSamples;
+
+  setSignal(
+    "evenSignal",
+    evenHigh ? "good" : "neutral",
+    evenHigh
+      ? stats.even.prediction
+      : `${stats.even.prediction} — LOW CONFIDENCE`
+  );
+
+  setBotText(
+    "evenConf",
+    evenHigh
+      ? "HIGH CONFIDENCE"
+      : "Below 80% historical accuracy"
+  );
+
+
+  /*
+    OVER / UNDER DISPLAY
+  */
+
+  setBotText(
+    "ouAcc",
+    percentage(stats.over.accuracy)
+  );
+
+  setBotText(
+    "ouWins",
+    stats.over.wins
+  );
+
+  setBotText(
+    "ouSamples",
+    stats.over.samples
+  );
+
+
+  const ouHigh =
+    stats.over.accuracy >= 80 &&
+    stats.over.samples >= state.bot.minimumSamples;
+
+  setSignal(
+    "ouSignal",
+    ouHigh ? "good" : "neutral",
+    ouHigh
+      ? `${stats.over.prediction} ${stats.over.threshold}`
+      : `${stats.over.prediction} ${stats.over.threshold} — LOW CONFIDENCE`
+  );
+
+  setBotText(
+    "ouConf",
+    ouHigh
+      ? "HIGH CONFIDENCE"
+      : "Below 80% historical accuracy"
+  );
+
+
+  /*
+    OVERALL FILTER
+  */
+
+  const highCount =
+    [matchHigh, evenHigh, ouHigh]
+      .filter(Boolean)
+      .length;
+
+  setBotText(
+    "filterStatus",
+    highCount > 0
+      ? `${highCount} HIGH-CONFIDENCE SIGNAL${highCount > 1 ? "S" : ""}`
+      : "NO 80%+ SIGNAL"
+  );
+
+  setBotText(
+    "dataQuality",
+    `${state.digits.length} ticks analysed`
+  );
+}/* =========================================================
+   BOT UPDATE + LIVE SIGNAL REFRESH
+   ========================================================= */
+
+function refreshBot() {
+  if (!state.bot || !state.digits || state.digits.length < 20) {
+    return;
+  }
+
+  try {
+    updateBotPredictions();
+  } catch (err) {
+    console.error("Bot update error:", err);
+    log("Bot update error: " + err.message);
+  }
+}
+
+/* Run the prediction engine whenever a new tick arrives */
+function addBotTick(price) {
+  if (price === undefined || price === null) return;
+
+  const text = String(price);
+  const lastDigit = Number(text.slice(-1));
+
+  if (!Number.isInteger(lastDigit)) return;
+
+  state.digits.push(lastDigit);
+
+  /* Keep the most recent 500 ticks */
+  if (state.digits.length > 500) {
+    state.digits.shift();
+  }
+
+  refreshBot();
+}
+
+/* =========================================================
+   BOT CONTROLS
+   ========================================================= */
+
+const botRefreshBtn = $("botRefresh");
+
+if (botRefreshBtn) {
+  botRefreshBtn.onclick = () => {
+    refreshBot();
+    log("Prediction bot refreshed.");
+  };
+}
+
+const botSymbol = $("botSymbol");
+
+if (botSymbol) {
+  botSymbol.onchange = (e) => {
+    state.symbol = e.target.value;
+
+    const marketSelect = $("symbolSelect");
+
+    if (marketSelect) {
+      marketSelect.value = state.symbol;
+    }
+
+    state.prices = [];
+    state.digits = [];
+
+    connectPublicMarket();
+
+    log("Bot market changed to " + state.symbol);
+  };
+}
+
+/* =========================================================
+   CONNECT BOT TO LIVE MARKET TICKS
+   ========================================================= */
+
+function processBotMarketTick(quote) {
+  if (quote === undefined || quote === null) return;
+
+  addBotTick(quote);
+
+  const botPrice = $("botPrice");
+
+  if (botPrice) {
+    botPrice.textContent = quote;
+  }
+
+  const lastDigit = Number(String(quote).slice(-1));
+
+  const botDigit = $("botDigit");
+
+  if (botDigit && Number.isInteger(lastDigit)) {
+    botDigit.textContent = lastDigit;
+  }
+}
+
+/* =========================================================
+   INITIAL BOT STATE
+   ========================================================= */
+
+if (!Array.isArray(state.digits)) {
+  state.digits = [];
+}
+
+if (!state.bot) {
+  state.bot = {
+    minimumSamples: 50,
+    threshold: 0.80,
+    enabled: true
+  };
+}
+
+log("Prediction bot initialized.");
