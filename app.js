@@ -935,53 +935,161 @@ if (!state.bot) {
 }
 
 log("Prediction bot initialized.");/* =========================================================
-   WEBSOCKET CONNECTION
+   LOGIN / LOGOUT
+   ========================================================= */
+
+const loginBtn = $("loginBtn");
+const logoutBtn = $("logoutBtn");
+
+if (loginBtn) {
+  loginBtn.onclick = () => {
+    window.location.href = "/auth/login";
+  };
+}
+
+if (logoutBtn) {
+  logoutBtn.onclick = async () => {
+    await fetch("/auth/logout", {
+      method: "POST"
+    });
+    window.location.reload();
+  };
+}
+
+
+/* =========================================================
+   PUBLIC MARKET WEBSOCKET
    ========================================================= */
 
 let marketWS = null;
 
 function connectPublicMarket() {
-    if (marketWS) {
-        try { marketWS.close(); } catch(e) {}
-        marketWS = null;
+
+  if (marketWS) {
+    try {
+      marketWS.close();
+    } catch (e) {}
+  }
+
+  setStatus(false, "Connecting...");
+
+  const ws =
+    new WebSocket(
+      "wss://ws.binaryws.com/websockets/v3?app_id=1089"
+    );
+
+  marketWS = ws;
+
+  ws.onopen = () => {
+
+    setStatus(true, "Market online");
+
+    log("Market WebSocket connected.");
+
+    ws.send(JSON.stringify({
+      ticks: state.symbol,
+      subscribe: 1
+    }));
+  };
+
+  ws.onmessage = (event) => {
+
+    try {
+
+      const data = JSON.parse(event.data);
+
+      if (!data.tick) return;
+
+      const price =
+        Number(data.tick.quote);
+
+      const epoch =
+        data.tick.epoch;
+
+      /* CURRENT PRICE */
+      const priceEl = $("price");
+
+      if (priceEl) {
+        priceEl.textContent = price;
+      }
+
+      /* LAST TICK */
+      const lastTickEl = $("lastTick");
+
+      if (lastTickEl) {
+        lastTickEl.textContent =
+          new Date(
+            Number(epoch) * 1000
+          ).toLocaleTimeString();
+      }
+
+      /* SYMBOL */
+      const symbolEl = $("symbolCode");
+
+      if (symbolEl) {
+        symbolEl.textContent =
+          state.symbol;
+      }
+
+      /* LAST DIGIT */
+      updateLastDigit(price);
+
+      /* PRICE HISTORY */
+      state.prices.push(price);
+
+      if (state.prices.length > 100) {
+        state.prices.shift();
+      }
+
+      /* UPDATE PRICE CHANGE */
+      updatePriceUI(price, epoch);
+
+      /* DRAW CHART */
+      drawChart();
+
+      /* PREDICTION BOT */
+      processBotMarketTick(price);
+
+    } catch (err) {
+
+      console.error(
+        "Market message error:",
+        err
+      );
+
     }
+  };
 
-    const ws = new WebSocket("wss://ws.binaryws.com/websockets/v3?app_id=1089");
-    marketWS = ws;
+  ws.onerror = (error) => {
 
-    ws.onopen = function() {
-        ws.send(JSON.stringify({ ticks: state.symbol, subscribe: 1 }));
-    };
+    console.error(
+      "Market WebSocket error:",
+      error
+    );
 
-    ws.onmessage = function(event) {
-        try {
-            const data = JSON.parse(event.data);
-            if (data.tick && data.tick.quote) {
-                const price = parseFloat(data.tick.quote);
-                
-                const lastTick = document.getElementById("lastTick");
-                if (lastTick) lastTick.textContent = price;
-                
-                const symbolDisplay = document.getElementById("symbolDisplay");
-                if (symbolDisplay) symbolDisplay.textContent = state.symbol;
-                
-                const currentPrice = document.getElementById("currentPrice");
-                if (currentPrice) currentPrice.textContent = price;
-                
-                const digit = String(price).slice(-1);
-                const botDigit = document.getElementById("botDigit");
-                if (botDigit) botDigit.textContent = digit;
-                
-                if (typeof addBotTick === 'function') {
-                    addBotTick(price);
-                }
-            }
-        } catch(e) {}
-    };
+    setStatus(false, "Market error");
 
-    ws.onclose = function() {
-        setTimeout(connectPublicMarket, 5000);
-    };
+    log("Market WebSocket error.");
+
+  };
+
+  ws.onclose = () => {
+
+    setStatus(false, "Market offline");
+
+    log("Market disconnected. Reconnecting...");
+
+    setTimeout(
+      connectPublicMarket,
+      5000
+    );
+
+  };
 }
 
-setTimeout(connectPublicMarket, 1000);
+
+/* START MARKET */
+setTimeout(
+  connectPublicMarket,
+  1000
+);
