@@ -292,7 +292,7 @@ function resetMarketData() {
   }
 
   drawChart();
-      }function setBotText(id, text) {
+}function setBotText(id, text) {
   const el = $(id);
   if (el) el.textContent = text;
 }
@@ -934,145 +934,54 @@ if (!state.bot) {
   };
 }
 
-log("Prediction bot initialized.")}  // <--- End of processBotMarketTickquote functionlog("Prediction bot initialized.");
-/* =========================================================
-   FIXED STATE INITIALIZATION
-   ========================================================= */
-
-if (!Array.isArray(state.digits)) {
-    state.digits = [];
-}
-
-if (!state.bot) {
-    state.bot = {
-        minimumSamples: 50,
-        threshold: 0.80,
-        enabled: true
-    };
-}
-
-log("Prediction bot initialized.");
-
-/* =========================================================
-   WEBSOCKET CONNECTION FOR LIVE MARKET DATA
+log("Prediction bot initialized.");/* =========================================================
+   WEBSOCKET CONNECTION
    ========================================================= */
 
 let marketWS = null;
 
 function connectPublicMarket() {
-    // Close existing connection if any
     if (marketWS) {
-        try {
-            marketWS.close();
-            marketWS = null;
-        } catch (e) {
-            console.error("Error closing WebSocket:", e);
-        }
+        try { marketWS.close(); } catch(e) {}
+        marketWS = null;
     }
 
-    log("Connecting to market for " + state.symbol);
-
-    // Connect to Deriv WebSocket
     const ws = new WebSocket("wss://ws.binaryws.com/websockets/v3?app_id=1089");
     marketWS = ws;
 
     ws.onopen = function() {
-        log("WebSocket connected, subscribing to " + state.symbol);
-        setStatus(true, "Connected - " + state.symbol);
-        
-        // Subscribe to ticks for the selected symbol
-        const subscribeMsg = {
-            ticks: state.symbol,
-            subscribe: 1
-        };
-        ws.send(JSON.stringify(subscribeMsg));
+        ws.send(JSON.stringify({ ticks: state.symbol, subscribe: 1 }));
     };
 
     ws.onmessage = function(event) {
         try {
             const data = JSON.parse(event.data);
-            
-            // Check if this is a tick message
-            if (data.tick && data.tick.quote !== undefined) {
+            if (data.tick && data.tick.quote) {
                 const price = parseFloat(data.tick.quote);
                 
-                // Update UI - Last Tick
                 const lastTick = document.getElementById("lastTick");
-                if (lastTick) {
-                    lastTick.textContent = price;
-                }
+                if (lastTick) lastTick.textContent = price;
                 
-                // Update UI - Symbol Display
                 const symbolDisplay = document.getElementById("symbolDisplay");
-                if (symbolDisplay) {
-                    symbolDisplay.textContent = state.symbol;
-                }
+                if (symbolDisplay) symbolDisplay.textContent = state.symbol;
                 
-                // Update UI - Current Price
                 const currentPrice = document.getElementById("currentPrice");
-                if (currentPrice) {
-                    currentPrice.textContent = price;
-                }
+                if (currentPrice) currentPrice.textContent = price;
                 
-                // Store price history
-                state.prices.push(price);
-                if (state.prices.length > 200) {
-                    state.prices.shift();
-                }
+                const digit = String(price).slice(-1);
+                const botDigit = document.getElementById("botDigit");
+                if (botDigit) botDigit.textContent = digit;
                 
-                // Send to bot for prediction
-                processBotMarketTick(price);
+                if (typeof addBotTick === 'function') {
+                    addBotTick(price);
+                }
             }
-        } catch (e) {
-            console.error("Error processing tick:", e);
-        }
-    };
-
-    ws.onerror = function(error) {
-        console.error("WebSocket error:", error);
-        log("Market WebSocket error");
-        setStatus(false, "Connection error");
+        } catch(e) {}
     };
 
     ws.onclose = function() {
-        log("Market WebSocket closed");
-        setStatus(false, "Disconnected");
-        
-        // Auto-reconnect after 3 seconds
-        setTimeout(function() {
-            if (marketWS === ws) {
-                log("Attempting to reconnect...");
-                connectPublicMarket();
-            }
-        }, 3000);
+        setTimeout(connectPublicMarket, 5000);
     };
 }
 
-/* =========================================================
-   BOT TICK PROCESSOR (FIXED)
-   ========================================================= */
-
-function processBotMarketTick(quote) {
-    if (quote === undefined || quote === null) return;
-
-    addBotTick(quote);
-
-    const botPrice = document.getElementById("botPrice");
-    if (botPrice) {
-        botPrice.textContent = quote;
-    }
-
-    const lastDigit = Number(String(quote).slice(-1));
-    const botDigit = document.getElementById("botDigit");
-    if (botDigit && Number.isInteger(lastDigit)) {
-        botDigit.textContent = lastDigit;
-    }
-}
-
-/* =========================================================
-   AUTO-CONNECT ON PAGE LOAD
-   ========================================================= */
-
-setTimeout(function() {
-    connectPublicMarket();
-}, 1000);
+setTimeout(connectPublicMarket, 1000);
