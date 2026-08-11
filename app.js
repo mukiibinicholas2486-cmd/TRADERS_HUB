@@ -955,28 +955,43 @@ if (logoutBtn) {
     window.location.reload();
   };
 }
-
-
 /* =========================================================
    PUBLIC MARKET WEBSOCKET
    ========================================================= */
 
 let marketWS = null;
+let marketReconnectTimer = null;
 
 function connectPublicMarket() {
 
+  // Close existing connection
   if (marketWS) {
     try {
+      marketWS.onopen = null;
+      marketWS.onmessage = null;
+      marketWS.onerror = null;
+      marketWS.onclose = null;
       marketWS.close();
-    } catch (e) {}
+    } catch (e) {
+      console.warn("Could not close previous market WebSocket:", e);
+    }
+
+    marketWS = null;
+  }
+
+  // Cancel previous reconnect timer
+  if (marketReconnectTimer) {
+    clearTimeout(marketReconnectTimer);
+    marketReconnectTimer = null;
   }
 
   setStatus(false, "Connecting...");
 
-  const ws =
-    new WebSocket(
-      "wss://ws.binaryws.com/websockets/v3?app_id=1089"
-    );
+  const symbol = state.symbol || "1HZ100V";
+
+  const ws = new WebSocket(
+    "wss://ws.binaryws.com/websockets/v3?app_id=1089"
+  );
 
   marketWS = ws;
 
@@ -986,10 +1001,15 @@ function connectPublicMarket() {
 
     log("Market WebSocket connected.");
 
-    ws.send(JSON.stringify({
-      ticks: state.symbol,
-      subscribe: 1
-    }));
+    // Subscribe to live ticks
+    ws.send(
+      JSON.stringify({
+        ticks: symbol,
+        subscribe: 1
+      })
+    );
+
+    log("Subscribed to " + symbol);
   };
 
   ws.onmessage = (event) => {
@@ -998,56 +1018,74 @@ function connectPublicMarket() {
 
       const data = JSON.parse(event.data);
 
-      if (!data.tick) return;
+      // Ignore messages that are not ticks
+      if (!data.tick) {
+        return;
+      }
 
-      const price =
-        Number(data.tick.quote);
+      const price = Number(data.tick.quote);
+      const epoch = data.tick.epoch;
 
-      const epoch =
-        data.tick.epoch;
+      if (!Number.isFinite(price)) {
+        return;
+      }
 
       /* CURRENT PRICE */
+
       const priceEl = $("price");
 
       if (priceEl) {
         priceEl.textContent = price;
       }
 
+
       /* LAST TICK */
+
       const lastTickEl = $("lastTick");
 
       if (lastTickEl) {
+
         lastTickEl.textContent =
-          new Date(
-            Number(epoch) * 1000
-          ).toLocaleTimeString();
+          new Date(Number(epoch) * 1000)
+            .toLocaleTimeString();
       }
 
+
       /* SYMBOL */
+
       const symbolEl = $("symbolCode");
 
       if (symbolEl) {
-        symbolEl.textContent =
-          state.symbol;
+        symbolEl.textContent = state.symbol;
       }
 
+
       /* LAST DIGIT */
+
       updateLastDigit(price);
 
+
       /* PRICE HISTORY */
+
       state.prices.push(price);
 
       if (state.prices.length > 100) {
         state.prices.shift();
       }
 
+
       /* UPDATE PRICE CHANGE */
+
       updatePriceUI(price, epoch);
 
+
       /* DRAW CHART */
+
       drawChart();
 
+
       /* PREDICTION BOT */
+
       processBotMarketTick(price);
 
     } catch (err) {
@@ -1060,6 +1098,7 @@ function connectPublicMarket() {
     }
   };
 
+
   ws.onerror = (error) => {
 
     console.error(
@@ -1070,26 +1109,83 @@ function connectPublicMarket() {
     setStatus(false, "Market error");
 
     log("Market WebSocket error.");
-
   };
 
+
   ws.onclose = () => {
+
+    // Only reconnect if this is still the active socket
+    if (marketWS !== ws) {
+      return;
+    }
+
+    marketWS = null;
 
     setStatus(false, "Market offline");
 
     log("Market disconnected. Reconnecting...");
 
-    setTimeout(
-      connectPublicMarket,
-      5000
-    );
-
+    marketReconnectTimer = setTimeout(() => {
+      connectPublicMarket();
+    }, 5000);
   };
 }
 
 
-/* START MARKET */
-setTimeout(
-  connectPublicMarket,
-  1000
-);
+/* =========================================================
+   BOT MARKET SYMBOL CHANGE
+   ========================================================= */
+
+const botSymbol = $("botSymbol");
+
+if (botSymbol) {
+
+  botSymbol.onchange = (e) => {
+
+    state.symbol = e.target.value;
+
+    const marketSelect = $("symbolSelect");
+
+    if (marketSelect) {
+      marketSelect.value = state.symbol;
+    }
+
+    // Clear old market history
+    state.prices = [];
+    state.digits = [];
+
+    // Reconnect to the newly selected symbol
+    connectPublicMarket();
+
+    log(
+      "Bot market changed to " +
+      state.symbol
+    );
+  };
+}
+
+
+/* =========================================================
+   CONNECT BOT TO LIVE MARKET TICKS
+   ========================================================= */
+
+function processBotMarketTick(quote) {
+
+  if (
+    quote === undefined ||
+    quote === null
+  ) {
+    return;
+  }
+
+  addBotTick(quote);
+}
+
+
+/* =========================================================
+   START MARKET
+   ========================================================= */
+
+setTimeout(() => {
+  connectPublicMarket();
+}, 1000);
