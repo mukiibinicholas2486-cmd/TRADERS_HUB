@@ -7,16 +7,24 @@ const fs = require("fs");
 const path = require("path");
 
 const app = express();
+
 const PORT = Number(process.env.PORT || 3000);
 const DERIV_CLIENT_ID = process.env.DERIV_CLIENT_ID || "";
 const DERIV_REDIRECT_URI = process.env.DERIV_REDIRECT_URI || "";
-const SESSION_SECRET = process.env.SESSION_SECRET || "change-me-in-production";
+const SESSION_SECRET =
+  process.env.SESSION_SECRET || "change-me-in-production";
 
-if (process.env.NODE_ENV === "production" && SESSION_SECRET === "change-me-in-production") {
-  console.warn("WARNING: SESSION_SECRET is using the development default.");
+if (
+  process.env.NODE_ENV === "production" &&
+  SESSION_SECRET === "change-me-in-production"
+) {
+  console.warn(
+    "WARNING: SESSION_SECRET is using the development default."
+  );
 }
 
 app.set("trust proxy", 1);
+
 app.use(express.json({ limit: "100kb" }));
 app.use(express.urlencoded({ extended: false }));
 
@@ -37,28 +45,42 @@ app.use(
 
 const PUBLIC_DIR = path.join(__dirname, "public");
 
+/*
+ * Serve the main application page.
+ *
+ * IMPORTANT:
+ * market-fix.js is intentionally NOT injected here.
+ * The application should have one source of truth for the
+ * Deriv public market WebSocket connection.
+ */
 function sendIndex(res) {
-  let html = fs.readFileSync(path.join(PUBLIC_DIR, "index.html"), "utf8");
+  let html = fs.readFileSync(
+    path.join(PUBLIC_DIR, "index.html"),
+    "utf8"
+  );
 
-  // Fix the accidental CSS text that was placed between </head> and <body>.
+  // Remove accidental CSS text that may have been placed
+  // between </head> and <body>.
   html = html.replace(
-    /\s*\.hidden\s*\{\s*display:\s*none\s*!important;\s*\}\s*(?=<body>)/,
+    /\s*\.hidden\s*\{\s*display:\s*none\s*!important;\s*\}\s*(?=<body>)/i,
     "\n"
   );
 
-  // Load the compatibility market layer after the existing app.js.
-  if (!html.includes('src="/market-fix.js"')) {
-    html = html.replace(
-      /<\/body>/i,
-      '  <script src="/market-fix.js"></script>\n</body>'
-    );
-  }
+  // Remove any old compatibility-layer script that may still
+  // exist inside index.html. This prevents a second Deriv
+  // WebSocket/market connection from being started.
+  html = html.replace(
+    /<script[^>]+src=["']\/market-fix\.js["'][^>]*><\/script>\s*/gi,
+    ""
+  );
 
   res.type("html").send(html);
 }
 
-// The existing app.js/style.css live in the repository root.
-// Expose them explicitly because Express static only serves /public.
+/*
+ * The existing app.js and style.css are stored in the repository
+ * root rather than /public, so expose them explicitly.
+ */
 app.get("/app.js", (_req, res) => {
   res.sendFile(path.join(__dirname, "app.js"));
 });
@@ -67,12 +89,20 @@ app.get("/style.css", (_req, res) => {
   res.sendFile(path.join(__dirname, "style.css"));
 });
 
-app.get("/market-fix.js", (_req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, "market-fix.js"));
+/*
+ * Main application route.
+ */
+app.get("/", (_req, res) => {
+  sendIndex(res);
 });
 
-app.get("/", (_req, res) => sendIndex(res));
 app.use(express.static(PUBLIC_DIR));
+
+/*
+ * ------------------------------------------------------------------
+ * SECURITY / OAUTH HELPERS
+ * ------------------------------------------------------------------
+ */
 
 function base64url(buffer) {
   return buffer
@@ -87,26 +117,48 @@ function randomString(bytes = 32) {
 }
 
 function sha256Base64url(value) {
-  return base64url(crypto.createHash("sha256").update(value).digest());
+  return base64url(
+    crypto.createHash("sha256").update(value).digest()
+  );
 }
 
 function requireAuth(req, res, next) {
   if (!req.session.accessToken) {
-    return res.status(401).json({ error: "Not authenticated" });
+    return res.status(401).json({
+      error: "Not authenticated"
+    });
   }
+
   next();
 }
 
+/*
+ * ------------------------------------------------------------------
+ * HEALTH / CONFIG
+ * ------------------------------------------------------------------
+ */
+
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "TRADERS HUB" });
+  res.json({
+    ok: true,
+    service: "TRADERS HUB"
+  });
 });
 
 app.get("/api/config", (_req, res) => {
   res.json({
-    configured: Boolean(DERIV_CLIENT_ID && DERIV_REDIRECT_URI),
+    configured: Boolean(
+      DERIV_CLIENT_ID && DERIV_REDIRECT_URI
+    ),
     redirectUri: DERIV_REDIRECT_URI || null
   });
 });
+
+/*
+ * ------------------------------------------------------------------
+ * DERIV OAUTH LOGIN
+ * ------------------------------------------------------------------
+ */
 
 app.get("/auth/login", (req, res) => {
   if (!DERIV_CLIENT_ID || !DERIV_REDIRECT_URI) {
@@ -132,137 +184,258 @@ app.get("/auth/login", (req, res) => {
     code_challenge_method: "S256"
   });
 
-  res.redirect(`https://auth.deriv.com/oauth2/auth?${params.toString()}`);
+  res.redirect(
+    `https://auth.deriv.com/oauth2/auth?${params.toString()}`
+  );
 });
 
+/*
+ * ------------------------------------------------------------------
+ * DERIV OAUTH CALLBACK
+ * ------------------------------------------------------------------
+ */
+
 app.get("/callback", async (req, res) => {
-  const { code, state, error, error_description } = req.query;
+  const {
+    code,
+    state,
+    error,
+    error_description
+  } = req.query;
 
   if (error) {
     return res.status(400).send(
-      `Deriv login was not completed: ${error_description || error}`
+      `Deriv login was not completed: ${
+        error_description || error
+      }`
     );
   }
 
   if (!code || !state) {
-    return res.status(400).send("Missing OAuth code or state.");
+    return res.status(400).send(
+      "Missing OAuth code or state."
+    );
   }
 
-  if (!req.session.oauthState || state !== req.session.oauthState) {
-    return res.status(400).send("OAuth state mismatch. Please start login again.");
+  if (
+    !req.session.oauthState ||
+    state !== req.session.oauthState
+  ) {
+    return res.status(400).send(
+      "OAuth state mismatch. Please start login again."
+    );
   }
 
   const codeVerifier = req.session.codeVerifier;
 
+  if (!codeVerifier) {
+    return res.status(400).send(
+      "OAuth code verifier is missing. Please start login again."
+    );
+  }
+
   try {
-    const tokenResponse = await fetch("https://auth.deriv.com/oauth2/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        client_id: DERIV_CLIENT_ID,
-        code,
-        code_verifier: codeVerifier,
-        redirect_uri: DERIV_REDIRECT_URI
-      })
-    });
+    const tokenResponse = await fetch(
+      "https://auth.deriv.com/oauth2/token",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+            "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          client_id: DERIV_CLIENT_ID,
+          code,
+          code_verifier: codeVerifier,
+          redirect_uri: DERIV_REDIRECT_URI
+        })
+      }
+    );
 
     const tokenData = await tokenResponse.json();
 
-    if (!tokenResponse.ok || !tokenData.access_token) {
-      console.error("OAuth token exchange failed:", tokenData);
+    if (
+      !tokenResponse.ok ||
+      !tokenData.access_token
+    ) {
+      console.error(
+        "OAuth token exchange failed:",
+        tokenData
+      );
+
       return res
         .status(502)
-        .send("Deriv did not return an access token. Check your App ID and Redirect URL.");
+        .send(
+          "Deriv did not return an access token. Check your App ID and Redirect URL."
+        );
     }
 
-    req.session.accessToken = tokenData.access_token;
+    req.session.accessToken =
+      tokenData.access_token;
+
     req.session.expiresAt =
-      Date.now() + Number(tokenData.expires_in || 3600) * 1000;
+      Date.now() +
+      Number(tokenData.expires_in || 3600) * 1000;
 
     delete req.session.oauthState;
     delete req.session.codeVerifier;
 
     res.redirect("/");
   } catch (err) {
-    console.error(err);
-    res.status(500).send("OAuth callback failed.");
+    console.error(
+      "OAuth callback error:",
+      err
+    );
+
+    res.status(500).send(
+      "OAuth callback failed."
+    );
   }
 });
 
+/*
+ * ------------------------------------------------------------------
+ * LOGOUT / AUTH STATUS
+ * ------------------------------------------------------------------
+ */
+
 app.post("/auth/logout", (req, res) => {
-  req.session.destroy(() => {
-    res.json({ ok: true });
+  req.session.destroy((err) => {
+    if (err) {
+      console.error(
+        "Session destroy error:",
+        err
+      );
+
+      return res.status(500).json({
+        error: "Could not log out."
+      });
+    }
+
+    res.json({
+      ok: true
+    });
   });
 });
 
 app.get("/api/auth/status", (req, res) => {
   res.json({
-    authenticated: Boolean(req.session.accessToken),
-    expiresAt: req.session.expiresAt || null
+    authenticated: Boolean(
+      req.session.accessToken
+    ),
+    expiresAt:
+      req.session.expiresAt || null
   });
 });
 
-app.get("/api/accounts", requireAuth, async (req, res) => {
-  try {
-    const response = await fetch(
-      "https://api.derivws.com/trading/v1/options/accounts",
-      {
-        headers: {
-          Authorization: `Bearer ${req.session.accessToken}`,
-          "Deriv-App-ID": DERIV_CLIENT_ID
+/*
+ * ------------------------------------------------------------------
+ * DERIV ACCOUNTS
+ * ------------------------------------------------------------------
+ */
+
+app.get(
+  "/api/accounts",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const response = await fetch(
+        "https://api.derivws.com/trading/v1/options/accounts",
+        {
+          headers: {
+            Authorization: `Bearer ${req.session.accessToken}`,
+            "Deriv-App-ID": DERIV_CLIENT_ID
+          }
         }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return res
+          .status(response.status)
+          .json(data);
       }
-    );
 
-    const data = await response.json();
+      res.json(data);
+    } catch (err) {
+      console.error(
+        "Accounts request failed:",
+        err
+      );
 
-    if (!response.ok) {
-      return res.status(response.status).json(data);
+      res.status(502).json({
+        error: "Could not reach Deriv."
+      });
+    }
+  }
+);
+
+/*
+ * ------------------------------------------------------------------
+ * DERIV ACCOUNT WEBSOCKET OTP
+ * ------------------------------------------------------------------
+ */
+
+app.post(
+  "/api/ws-url",
+  requireAuth,
+  async (req, res) => {
+    const accountId = String(
+      req.body.accountId || ""
+    ).trim();
+
+    if (!accountId) {
+      return res.status(400).json({
+        error: "accountId is required"
+      });
     }
 
-    res.json(data);
-  } catch (err) {
-    console.error(err);
-    res.status(502).json({ error: "Could not reach Deriv." });
-  }
-});
-
-app.post("/api/ws-url", requireAuth, async (req, res) => {
-  const accountId = String(req.body.accountId || "").trim();
-
-  if (!accountId) {
-    return res.status(400).json({ error: "accountId is required" });
-  }
-
-  try {
-    const response = await fetch(
-      `https://api.derivws.com/trading/v1/options/accounts/${encodeURIComponent(accountId)}/otp`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${req.session.accessToken}`,
-          "Deriv-App-ID": DERIV_CLIENT_ID
+    try {
+      const response = await fetch(
+        `https://api.derivws.com/trading/v1/options/accounts/${encodeURIComponent(
+          accountId
+        )}/otp`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${req.session.accessToken}`,
+            "Deriv-App-ID": DERIV_CLIENT_ID
+          }
         }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return res
+          .status(response.status)
+          .json(data);
       }
-    );
 
-    const data = await response.json();
+      res.json({
+        url: data?.data?.url || null
+      });
+    } catch (err) {
+      console.error(
+        "WebSocket OTP request failed:",
+        err
+      );
 
-    if (!response.ok) {
-      return res.status(response.status).json(data);
+      res.status(502).json({
+        error: "Could not create a WebSocket OTP."
+      });
     }
-
-    res.json({ url: data?.data?.url || null });
-  } catch (err) {
-    console.error(err);
-    res.status(502).json({ error: "Could not create a WebSocket OTP." });
   }
-});
+);
 
-// SPA fallback, while keeping API/auth routes untouched.
+/*
+ * ------------------------------------------------------------------
+ * SPA FALLBACK
+ * ------------------------------------------------------------------
+ */
+
 app.get("*", (req, res, next) => {
   if (
     req.path.startsWith("/api/") ||
@@ -270,8 +443,7 @@ app.get("*", (req, res, next) => {
     req.path === "/callback" ||
     req.path === "/health" ||
     req.path === "/app.js" ||
-    req.path === "/style.css" ||
-    req.path === "/market-fix.js"
+    req.path === "/style.css"
   ) {
     return next();
   }
@@ -283,6 +455,14 @@ app.get("*", (req, res, next) => {
   next();
 });
 
+/*
+ * ------------------------------------------------------------------
+ * START SERVER
+ * ------------------------------------------------------------------
+ */
+
 app.listen(PORT, () => {
-  console.log(`TRADERS HUB running on http://localhost:${PORT}`);
+  console.log(
+    `TRADERS HUB running on http://localhost:${PORT}`
+  );
 });
