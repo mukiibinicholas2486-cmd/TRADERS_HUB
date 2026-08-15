@@ -171,7 +171,7 @@ app.get("/auth/login", (req, res) => {
   const codeVerifier = randomString(48);
   const codeChallenge = sha256Base64url(codeVerifier);
 
-  req.session.oauthState = state;
+    req.session.oauthState = state;
   req.session.codeVerifier = codeVerifier;
 
   const params = new URLSearchParams({
@@ -184,9 +184,16 @@ app.get("/auth/login", (req, res) => {
     code_challenge_method: "S256"
   });
 
-  res.redirect(
-    `https://auth.deriv.com/oauth2/auth?${params.toString()}`
-  );
+  req.session.save((err) => {
+    if (err) {
+      console.error("Session save failed:", err);
+      return res.status(500).send("Session save failed.");
+    }
+
+    res.redirect(
+      `https://auth.deriv.com/oauth2/auth?${params.toString()}`
+    );
+  });
 });
 
 /*
