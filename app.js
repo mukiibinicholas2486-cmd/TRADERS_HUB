@@ -955,6 +955,186 @@ if (logoutBtn) {
     window.location.reload();
   };
 }
+/* ============================================================
+   AUTH + ACCOUNT UI
+   ============================================================ */
+
+async function loadAuthenticatedAccount() {
+  const loginBtn = document.getElementById("loginBtn");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const accountBadge = document.getElementById("accountBadge");
+  const accountSelect = document.getElementById("accountSelect");
+  const balanceEl = document.getElementById("balance");
+  const currencyEl = document.getElementById("currency");
+
+  try {
+    // Check whether the server session is authenticated.
+    const statusResponse = await fetch("/api/auth/status", {
+      credentials: "same-origin"
+    });
+
+    if (!statusResponse.ok) {
+      throw new Error("Could not check authentication status.");
+    }
+
+    const status = await statusResponse.json();
+
+    if (!status.authenticated) {
+      if (accountBadge) {
+        accountBadge.textContent = "NOT LOGGED IN";
+      }
+
+      if (loginBtn) {
+        loginBtn.style.display = "";
+      }
+
+      if (logoutBtn) {
+        logoutBtn.style.display = "none";
+      }
+
+      if (accountSelect) {
+        accountSelect.innerHTML =
+          '<option value="">Login to load accounts</option>';
+      }
+
+      if (balanceEl) balanceEl.textContent = "—";
+      if (currencyEl) currencyEl.textContent = "—";
+
+      return;
+    }
+
+    // The backend says we are authenticated.
+    if (accountBadge) {
+      accountBadge.textContent = "LOGGED IN";
+    }
+
+    if (loginBtn) {
+      loginBtn.style.display = "none";
+    }
+
+    if (logoutBtn) {
+      logoutBtn.style.display = "";
+    }
+
+    // Load Deriv accounts.
+    const accountsResponse = await fetch("/api/accounts", {
+      credentials: "same-origin"
+    });
+
+    if (!accountsResponse.ok) {
+      throw new Error("Could not load Deriv accounts.");
+    }
+
+    const payload = await accountsResponse.json();
+
+    // Be tolerant of the different response shapes Deriv may return.
+    const accounts =
+      payload?.data?.accounts ||
+      payload?.accounts ||
+      (Array.isArray(payload?.data) ? payload.data : []);
+
+    if (!accountSelect) {
+      console.warn("accountSelect was not found.");
+      return;
+    }
+
+    accountSelect.innerHTML = "";
+
+    if (!Array.isArray(accounts) || accounts.length === 0) {
+      accountSelect.innerHTML =
+        '<option value="">No accounts returned</option>';
+
+      if (balanceEl) balanceEl.textContent = "—";
+      if (currencyEl) currencyEl.textContent = "—";
+
+      console.warn("No Deriv accounts returned:", payload);
+      return;
+    }
+
+    accounts.forEach((account, index) => {
+      const accountId =
+        account.account_id ||
+        account.accountId ||
+        account.loginid ||
+        account.login_id ||
+        account.id ||
+        "";
+
+      const balance =
+        account.balance ??
+        account.amount ??
+        account.available_balance ??
+        "";
+
+      const currency =
+        account.currency ||
+        account.currency_code ||
+        "";
+
+      const option = document.createElement("option");
+
+      option.value = accountId;
+      option.textContent =
+        account.loginid ||
+        account.account_id ||
+        account.accountId ||
+        `Account ${index + 1}`;
+
+      option.dataset.balance = balance;
+      option.dataset.currency = currency;
+
+      accountSelect.appendChild(option);
+    });
+
+    // Display information for the first account.
+    updateSelectedAccountUI();
+
+    // Update balance/currency whenever the user changes accounts.
+    accountSelect.addEventListener("change", updateSelectedAccountUI);
+
+    function updateSelectedAccountUI() {
+      const selected =
+        accountSelect.options[accountSelect.selectedIndex];
+
+      if (!selected) {
+        if (balanceEl) balanceEl.textContent = "—";
+        if (currencyEl) currencyEl.textContent = "—";
+        return;
+      }
+
+      if (balanceEl) {
+        balanceEl.textContent =
+          selected.dataset.balance || "—";
+      }
+
+      if (currencyEl) {
+        currencyEl.textContent =
+          selected.dataset.currency || "—";
+      }
+    }
+
+    console.log("TRADERS HUB authentication loaded.");
+    console.log("Authenticated:", true);
+    console.log("Deriv accounts:", accounts);
+
+  } catch (error) {
+    console.error("Authentication/account loading error:", error);
+
+    if (accountBadge) {
+      accountBadge.textContent = "ACCOUNT ERROR";
+    }
+  }
+}
+
+// Run after the page has loaded.
+if (document.readyState === "loading") {
+  document.addEventListener(
+    "DOMContentLoaded",
+    loadAuthenticatedAccount
+  );
+} else {
+  loadAuthenticatedAccount();
+}
 /* =========================================================
    PUBLIC MARKET WEBSOCKET
    ========================================================= */
