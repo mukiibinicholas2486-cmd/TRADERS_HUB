@@ -1188,7 +1188,155 @@ const ws = new WebSocket(
         subscribe: 1
       })
     );
+/* =========================================================
+   AUTH + ACCOUNT UI
+   ========================================================= */
 
+async function loadAuthAndAccounts() {
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const accountBadge = document.getElementById("accountBadge");
+    const accountSelect = document.getElementById("accountSelect");
+
+    try {
+        // Check whether the current browser session is authenticated
+        const authResponse = await fetch("/api/auth/status", {
+            credentials: "same-origin"
+        });
+
+        const auth = await authResponse.json();
+
+        console.log("AUTH STATUS:", auth);
+
+        if (!auth.authenticated) {
+            if (accountBadge) {
+                accountBadge.textContent = "NOT LOGGED IN";
+            }
+
+            if (loginBtn) {
+                loginBtn.style.display = "";
+            }
+
+            if (logoutBtn) {
+                logoutBtn.style.display = "none";
+            }
+
+            if (accountSelect) {
+                accountSelect.innerHTML =
+                    '<option value="">Login to load accounts</option>';
+            }
+
+            return;
+        }
+
+        // User IS authenticated
+        if (accountBadge) {
+            accountBadge.textContent = "LOGGED IN";
+        }
+
+        if (loginBtn) {
+            loginBtn.style.display = "none";
+        }
+
+        if (logoutBtn) {
+            logoutBtn.style.display = "";
+        }
+
+        // Load accounts from backend
+        const accountsResponse = await fetch("/api/accounts", {
+            credentials: "same-origin"
+        });
+
+        const accountsResult = await accountsResponse.json();
+
+        console.log("ACCOUNTS:", accountsResult);
+
+        const accounts = Array.isArray(accountsResult)
+            ? accountsResult
+            : (accountsResult.data || []);
+
+        if (!accountSelect) {
+            console.error("accountSelect element was not found");
+            return;
+        }
+
+        accountSelect.innerHTML = "";
+
+        if (!accounts.length) {
+            accountSelect.innerHTML =
+                '<option value="">No accounts found</option>';
+            return;
+        }
+
+        accounts.forEach(account => {
+            const option = document.createElement("option");
+
+            option.value = account.account_id;
+
+            option.textContent =
+                `${account.account_id} — ${account.currency || ""} — ${account.account_type || ""}`;
+
+            option.dataset.balance = account.balance || "";
+            option.dataset.currency = account.currency || "";
+
+            accountSelect.appendChild(option);
+        });
+
+        // Show the first account immediately
+        accountSelect.selectedIndex = 0;
+        updateAccountDisplay(accountSelect);
+
+    } catch (error) {
+        console.error("AUTH/ACCOUNT UI ERROR:", error);
+
+        if (accountBadge) {
+            accountBadge.textContent = "AUTH ERROR";
+        }
+    }
+}
+
+
+function updateAccountDisplay(accountSelect) {
+    const selected =
+        accountSelect.options[accountSelect.selectedIndex];
+
+    if (!selected) return;
+
+    const balanceEl = document.getElementById("balance");
+    const currencyEl = document.getElementById("currency");
+
+    if (balanceEl) {
+        balanceEl.textContent =
+            selected.dataset.balance || "—";
+    }
+
+    if (currencyEl) {
+        currencyEl.textContent =
+            selected.dataset.currency || "—";
+    }
+}
+
+
+// Update balance/currency when another account is selected
+const accountSelectElement =
+    document.getElementById("accountSelect");
+
+if (accountSelectElement) {
+    accountSelectElement.addEventListener("change", () => {
+        updateAccountDisplay(accountSelectElement);
+    });
+}
+
+
+// Run authentication check when the page is ready
+if (document.readyState === "loading") {
+    document.addEventListener(
+        "DOMContentLoaded",
+        loadAuthAndAccounts
+    );
+} else {
+    loadAuthAndAccounts();
+}
     log("Subscribed to " + symbol);
   };
 
