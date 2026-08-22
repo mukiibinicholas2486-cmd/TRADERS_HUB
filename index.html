@@ -1,0 +1,872 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1,viewport-fit=cover"
+  >
+
+  <meta
+    name="theme-color"
+    content="#090b11"
+  >
+
+  <meta
+    name="description"
+    content="TRADERS HUB - Deriv Digit Options Terminal and Digit Analyzer"
+  >
+
+  <title>TRADERS HUB</title>
+
+  <link rel="stylesheet" href="/style.css">
+
+<style>
+.prediction-upgrade{margin:12px 0 0;padding:14px;border:1px solid #273246;border-radius:14px;background:linear-gradient(145deg,#0a101b,#0d1420 60%,#0a0f18);box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.prediction-upgrade-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}.prediction-upgrade-title{font-size:12px;font-weight:900;letter-spacing:.08em;color:#cbd5e1}.prediction-upgrade-status{font-size:10px;font-weight:900;padding:5px 8px;border-radius:999px;background:#171d29;color:#94a3b8;border:1px solid #293449}
+.prediction-hero{display:grid;grid-template-columns:1.05fr 1fr 1fr;gap:8px}.prediction-hero-card{padding:11px;border-radius:12px;background:#080d16;border:1px solid #202b3e;min-height:76px}.prediction-hero-card.primary{border-color:#53327a;background:linear-gradient(145deg,#100c1d,#0a0f18)}.prediction-kicker{font-size:9px;font-weight:900;letter-spacing:.08em;color:#718096}.prediction-big{font-size:30px;font-weight:950;line-height:1.05;margin-top:6px;color:#f8fafc}.prediction-metric{margin-top:6px;font-size:11px;color:#aeb9ca}
+.prediction-bars{margin-top:12px;display:grid;gap:7px}.prediction-bar-row{display:grid;grid-template-columns:24px 1fr 48px;gap:7px;align-items:center;font-size:10px;color:#94a3b8}.prediction-bar-track{height:7px;border-radius:99px;background:#171e2a;overflow:hidden}.prediction-bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#7c3aed,#c084fc);min-width:2px}.prediction-bar-row:first-child .prediction-bar-fill{background:linear-gradient(90deg,#22c55e,#86efac)}.prediction-bar-pct{text-align:right;color:#dbe5f4;font-weight:800}
+.prediction-live-strip{display:flex;gap:5px;overflow:hidden;margin-top:12px;padding-top:10px;border-top:1px solid #1d2737}.prediction-live-strip span{min-width:25px;height:25px;display:grid;place-items:center;border-radius:7px;background:#141c29;border:1px solid #263247;color:#dbe5f4;font-size:10px;font-weight:900}.prediction-live-strip span.latest{border-color:#8b5cf6;background:#24183a;color:#fff}
+.prediction-model-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.prediction-model-card{padding:10px;border:1px solid #202b3e;border-radius:11px;background:#0a1019}.prediction-model-card .label{font-size:9px;font-weight:900;color:#718096;letter-spacing:.06em}.prediction-model-card .value{margin-top:5px;font-size:14px;font-weight:900;color:#f1f5f9}.prediction-model-card .sub{margin-top:3px;font-size:10px;color:#8b98ad}
+.signal-matrix{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.signal-matrix-card{padding:10px;border:1px solid #202b3e;border-radius:11px;background:#090f18}.signal-matrix-card .title{font-size:9px;color:#718096;font-weight:900;letter-spacing:.06em}.signal-matrix-card .signal{margin-top:5px;font-size:14px;font-weight:950;color:#f8fafc}.signal-matrix-card .detail{margin-top:3px;font-size:10px;color:#94a3b8}
+@media(max-width:700px){.prediction-hero,.prediction-model-grid,.signal-matrix{grid-template-columns:1fr}.prediction-big{font-size:26px}}
+</style>
+</head>
+
+<body>
+
+<div class="app-shell">
+
+  <header class="topbar">
+
+    <div>
+      <div class="brand">
+        TRADERS <span>HUB</span>
+      </div>
+
+      <div class="subbrand">
+        DERIV DIGIT OPTIONS TERMINAL + DIGIT ANALYZER
+      </div>
+    </div>
+
+    <div class="top-actions">
+
+      <span
+        id="connectionDot"
+        class="status-dot offline"
+      ></span>
+
+      <span id="connectionText">
+        Market offline
+      </span>
+
+      <button
+        id="loginBtn"
+        class="btn primary"
+        type="button"
+      >
+        LOGIN WITH DERIV
+      </button>
+
+      <button
+        id="logoutBtn"
+        class="btn ghost"
+        type="button"
+        style="display:none"
+      >
+        LOGOUT
+      </button>
+
+    </div>
+
+  </header>
+
+  <main class="grid">
+
+    <section class="market-card card">
+
+      <div class="section-head">
+
+        <div>
+
+          <div class="eyebrow">
+            LIVE MARKET
+          </div>
+
+          <h1 id="symbolName">
+            Volatility 100 (1s)
+          </h1>
+
+        </div>
+
+        <select
+          id="symbolSelect"
+          class="select"
+          aria-label="Market"
+        >
+
+          <option value="1HZ10V">
+            Volatility 10 (1s)
+          </option>
+
+          <option value="R_10">
+            Volatility 10
+          </option>
+
+          <option value="1HZ5V">
+            Volatility 5 (1s)
+          </option>
+
+          <option value="R_5">
+            Volatility 5
+          </option>
+
+          <option value="1HZ25V">
+            Volatility 25 (1s)
+          </option>
+
+          <option value="R_25">
+            Volatility 25
+          </option>
+
+          <option value="1HZ50V">
+            Volatility 50 (1s)
+          </option>
+
+          <option value="R_50">
+            Volatility 50
+          </option>
+
+          <option value="1HZ75V">
+            Volatility 75 (1s)
+          </option>
+
+          <option value="R_75">
+            Volatility 75
+          </option>
+
+          <option value="1HZ90V">
+            Volatility 90 (1s)
+          </option>
+
+          <option value="R_90">
+            Volatility 90
+          </option>
+
+          <option value="1HZ100V">
+            Volatility 100 (1s)
+          </option>
+
+          <option value="R_100">
+            Volatility 100
+          </option>
+
+        </select>
+
+      </div>
+
+      <div class="price-row">
+
+        <div>
+
+          <div class="price-label">
+            CURRENT PRICE
+          </div>
+
+          <div
+            id="price"
+            class="price"
+          >
+            —
+          </div>
+
+        </div>
+
+        <div
+          id="priceChange"
+          class="change neutral"
+        >
+          WAITING
+        </div>
+
+      </div>
+
+      <canvas
+        id="chart"
+        height="260"
+        aria-label="Live market chart"
+      ></canvas>
+
+      <div class="ticker-row">
+
+        <div>
+          <span>LAST TICK</span>
+          <strong id="lastTick">—</strong>
+        </div>
+
+        <div>
+          <span>SYMBOL</span>
+          <strong id="symbolCode">1HZ100V</strong>
+        </div>
+
+        <div>
+          <span>LAST DIGIT</span>
+          <strong id="lastDigit">—</strong>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- DIGIT ORDER PANEL -->
+    <aside class="trade-card card">
+
+      <div class="section-head">
+
+        <div>
+
+          <div class="eyebrow">
+            DIGIT ORDER PANEL
+          </div>
+
+          <h2>
+            Trade
+          </h2>
+
+        </div>
+
+        <span
+          id="accountBadge"
+          class="badge"
+        >
+          NOT LOGGED IN
+        </span>
+
+      </div>
+
+      <label for="accountSelect">
+        Account
+      </label>
+
+      <select
+        id="accountSelect"
+        class="select full"
+        disabled
+      >
+
+        <option value="">
+          Login to load accounts
+        </option>
+
+      </select>
+
+      <div class="account-line">
+
+        <div>
+          <span>BALANCE</span>
+          <strong id="balance">—</strong>
+        </div>
+
+        <div>
+          <span>CURRENCY</span>
+          <strong id="currency">—</strong>
+        </div>
+
+      </div>
+
+      <label for="stake">
+        Stake
+      </label>
+
+      <div class="input-row">
+
+        <button
+          class="step"
+          data-step="-1"
+          type="button"
+          aria-label="Decrease stake"
+        >
+          −
+        </button>
+
+        <input
+          id="stake"
+          type="number"
+          min="0.35"
+          step="0.01"
+          value="1.00"
+          inputmode="decimal"
+        >
+
+        <button
+          class="step"
+          data-step="1"
+          type="button"
+          aria-label="Increase stake"
+        >
+          +
+        </button>
+
+      </div>
+
+      <!-- DIGIT CONTRACT TYPES -->
+      <div class="two-col">
+
+        <div>
+
+          <label for="contractType">
+            Digit contract
+          </label>
+
+          <select
+            id="contractType"
+            class="select full"
+          >
+
+            <option value="DIGITMATCH">
+              Digit Match
+            </option>
+
+            <option value="DIGITEVEN">
+              Even
+            </option>
+
+            <option value="DIGITODD">
+              Odd
+            </option>
+
+            <option value="DIGITOVER">
+              Digit Over
+            </option>
+
+            <option value="DIGITUNDER">
+              Digit Under
+            </option>
+
+          </select>
+
+        </div>
+
+        <div>
+
+          <label for="duration">
+            Duration
+          </label>
+
+          <div class="input-row">
+
+            <input
+              id="duration"
+              type="number"
+              min="1"
+              step="1"
+              value="1"
+              inputmode="numeric"
+            >
+
+            <select
+              id="durationUnit"
+              class="select compact"
+              aria-label="Duration unit"
+            >
+
+              <option value="t">
+                ticks
+              </option>
+
+              <option value="s">
+                sec
+              </option>
+
+              <option value="m">
+                min
+              </option>
+
+            </select>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      <label for="barrier">
+        Barrier / digit <span id="barrierHint">(Match: 0–9 • Over: 0–8 • Under: 1–9 • Even/Odd: not used)</span>
+      </label>
+
+      <input
+        id="barrier"
+        type="number"
+        min="0"
+        max="9"
+        step="1"
+        value="5"
+        inputmode="numeric"
+      >
+
+      <div
+        id="tradePredictionStatus"
+        class="demo-warning"
+        style="margin-top:10px"
+      >
+        WAITING FOR PREDICTION
+      </div>
+
+      <div
+        class="demo-warning"
+        style="margin-top:8px"
+      >
+        <strong>Confirmation gate:</strong> the predicted next digit/condition must be confirmed by the next market tick before a live proposal is requested. The confirmed tick is the trigger for a proposal on the following contract opportunity.
+      </div>
+
+
+
+      <div
+        class="prediction-gate-box"
+        style="margin-top:10px"
+      >
+        <span>PREDICTION CONFIRMATION</span>
+        <strong id="predictionGateStatus">WAITING FOR PREDICTION</strong>
+      </div>
+
+
+      <div class="proposal-box">
+
+        <div>
+          <span>ASK PRICE</span>
+          <strong id="askPrice">—</strong>
+        </div>
+
+        <div>
+          <span>PAYOUT</span>
+          <strong id="payout">—</strong>
+        </div>
+
+        <div>
+          <span>PROPOSAL</span>
+          <strong id="proposalId">AUTO</strong>
+        </div>
+
+      </div>
+
+      <div class="auto-bot-card" style="margin:12px 0;padding:12px;border:1px solid #273044;border-radius:12px;background:#080d17">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div>
+            <div style="font-size:11px;font-weight:800;letter-spacing:.06em;color:#94a3b8">AUTOMATIC TRADING BOT</div>
+            <strong id="autoBotStatus">AUTO BOT: OFF</strong>
+          </div>
+          <button id="autoBotToggle" class="btn outline" type="button">AUTO BOT: OFF</button>
+        </div>
+        <div class="two-col" style="margin-top:10px">
+          <div>
+            <label for="autoMaxTrades">Max trades / session</label>
+            <input id="autoMaxTrades" type="number" min="1" max="20" step="1" value="5" inputmode="numeric">
+          </div>
+          <div>
+            <label>Execution gate</label>
+            <strong>Confirmed tick + fresh proposal</strong>
+          </div>
+        </div>
+        <div class="demo-warning" style="margin-top:10px">
+          <strong>Safety:</strong> OFF by default. When enabled, the bot can place trades automatically on the selected Deriv account. Demo testing is strongly recommended.
+        </div>
+      </div>
+
+      <button
+        id="buyBtn"
+        class="btn trade full"
+        disabled
+        type="button"
+      >
+        BUY CONTRACT
+      </button>
+
+      <button
+        id="sellBtn"
+        class="btn danger full"
+        disabled
+        type="button"
+      >
+        SELL OPEN CONTRACT
+      </button>
+
+      <div class="demo-warning">
+
+        <strong>
+          Demo-first:
+        </strong>
+
+        test with a demo account before using
+        real money. The predictor is statistical
+        and does not guarantee profit or accuracy.
+
+      </div>
+
+    </aside>
+
+    <!-- PREDICTION ENGINE -->
+    <section class="prediction-engine card">
+
+      <div class="section-head">
+
+        <div>
+
+          <div class="eyebrow">
+            PREDICTION ENGINE
+          </div>
+
+          <h2>
+            Digit Bot — Match • Over / Under
+          </h2>
+
+        </div>
+
+        <button
+          id="botRefresh"
+          class="btn ghost small"
+          type="button"
+        >
+          REFRESH
+        </button>
+
+      </div>
+
+      <div
+        id="advancedPredictionDisplay"
+        style="
+          margin:10px 0;
+          padding:12px;
+          border-radius:10px;
+          background:#080d17;
+          border:1px solid #273044;
+        "
+      >
+
+        <div
+          style="
+            font-size:11px;
+            color:#94a3b8;
+            font-weight:800;
+            letter-spacing:.06em;
+          "
+        >
+          LIVE PREDICTION
+        </div>
+
+        <div
+          style="
+            margin-top:5px;
+            color:#64748b;
+            font-size:13px;
+          "
+        >
+          Collecting and validating tick data…
+        </div>
+
+      </div>
+
+      <div class="prediction-upgrade" id="predictionUpgrade">
+        <div class="prediction-upgrade-head"><div class="prediction-upgrade-title">UPGRADED MATCH ANALYTICS</div><div id="predictionUpgradeStatus" class="prediction-upgrade-status">WAITING FOR DATA</div></div>
+        <div class="prediction-hero">
+          <div class="prediction-hero-card primary"><div class="prediction-kicker">TOP NEXT DIGIT</div><div id="upgradeTopDigit" class="prediction-big">—</div><div id="upgradeTopDigitMeta" class="prediction-metric">No model candidate yet</div></div>
+          <div class="prediction-hero-card"><div class="prediction-kicker">MATCH EDGE</div><div id="upgradeMargin" class="prediction-big">—</div><div class="prediction-metric">lead over #2 candidate</div></div>
+          <div class="prediction-hero-card"><div class="prediction-kicker">VALIDATION</div><div id="upgradeValidation" class="prediction-big">—</div><div id="upgradeValidationMeta" class="prediction-metric">walk-forward samples</div></div>
+        </div>
+        <div id="upgradeDigitBars" class="prediction-bars"></div>
+        <div id="upgradeRecentDigits" class="prediction-live-strip"></div>
+        <div class="prediction-model-grid">
+          <div class="prediction-model-card"><div class="label">MODEL PROBABILITY</div><div id="upgradeProbability" class="value">—</div><div class="sub">top digit candidate</div></div>
+          <div class="prediction-model-card"><div class="label">BACKTEST WINS</div><div id="upgradeWins" class="value">—</div><div class="sub">validated predictions</div></div>
+          <div class="prediction-model-card"><div class="label">SAMPLES</div><div id="upgradeSamples" class="value">—</div><div class="sub">walk-forward tests</div></div>
+        </div>
+        <div class="signal-matrix">
+          <div class="signal-matrix-card"><div class="title">DIGIT MATCH</div><div id="upgradeMatchSignal" class="signal">WAITING</div><div id="upgradeMatchDetail" class="detail">—</div></div>
+          <div class="signal-matrix-card"><div class="title">EVEN / ODD</div><div id="upgradeEvenSignal" class="signal">WAITING</div><div id="upgradeEvenDetail" class="detail">—</div></div>
+          <div class="signal-matrix-card"><div class="title">OVER / UNDER</div><div id="upgradeOuSignal" class="signal">WAITING</div><div id="upgradeOuDetail" class="detail">—</div></div>
+        </div>
+      </div>
+
+      <input
+        id="botSymbol"
+        type="hidden"
+        value="1HZ100V"
+      >
+
+      <div class="two-col">
+
+        <div>
+
+          <label for="botThreshold">
+            Threshold
+          </label>
+
+          <input
+            id="botThreshold"
+            type="number"
+            min="0"
+            max="9"
+            step="1"
+            value="4"
+            inputmode="numeric"
+          >
+
+        </div>
+
+        <div>
+
+          <label>
+            Data quality
+          </label>
+
+          <strong id="dataQuality">
+            Collecting ticks…
+          </strong>
+
+        </div>
+
+      </div>
+
+      <div class="account-line">
+
+        <div>
+          <span>BOT DIGIT</span>
+          <strong id="botDigit">—</strong>
+        </div>
+
+        <div>
+          <span>FILTER</span>
+          <strong id="filterStatus">WAITING FOR DATA</strong>
+        </div>
+
+      </div>
+
+      <div class="proposal-box">
+
+        <div>
+          <span>MATCHES</span>
+
+          <strong
+            id="matchSignal"
+            class="signal neutral"
+          >
+            WAITING
+          </strong>
+        </div>
+
+        <div>
+          <span>CONFIDENCE</span>
+          <strong id="matchConf">Need more ticks</strong>
+        </div>
+
+        <div>
+          <span>BACKTEST</span>
+          <strong id="matchAcc">—</strong>
+        </div>
+
+        <div>
+          <span>WINS</span>
+          <strong id="matchWins">—</strong>
+        </div>
+
+        <div>
+          <span>SAMPLES</span>
+          <strong id="matchSamples">—</strong>
+        </div>
+
+      </div>
+
+      <div class="proposal-box">
+
+        <div>
+          <span>EVEN / ODD</span>
+
+          <strong
+            id="evenSignal"
+            class="signal neutral"
+          >
+            WAITING
+          </strong>
+        </div>
+
+        <div>
+          <span>CONFIDENCE</span>
+          <strong id="evenConf">Need more ticks</strong>
+        </div>
+
+        <div>
+          <span>BACKTEST</span>
+          <strong id="evenAcc">—</strong>
+        </div>
+
+        <div>
+          <span>WINS</span>
+          <strong id="evenWins">—</strong>
+        </div>
+
+        <div>
+          <span>SAMPLES</span>
+          <strong id="evenSamples">—</strong>
+        </div>
+
+      </div>
+
+      <div class="proposal-box">
+
+        <div>
+          <span>OVER / UNDER</span>
+
+          <strong
+            id="ouSignal"
+            class="signal neutral"
+          >
+            WAITING
+          </strong>
+        </div>
+
+        <div>
+          <span>CONFIDENCE</span>
+          <strong id="ouConf">Need more ticks</strong>
+        </div>
+
+        <div>
+          <span>BACKTEST</span>
+          <strong id="ouAcc">—</strong>
+        </div>
+
+        <div>
+          <span>WINS</span>
+          <strong id="ouWins">—</strong>
+        </div>
+
+        <div>
+          <span>SAMPLES</span>
+          <strong id="ouSamples">—</strong>
+        </div>
+
+      </div>
+
+      <div class="demo-warning">
+
+        <strong>
+          Validation filter:
+        </strong>
+
+        HIGH CONFIDENCE is shown only when the
+        configured walk-forward validation and
+        probability requirements are satisfied.
+
+        A candidate prediction is not a guarantee
+        that the next contract will win.
+
+      </div>
+
+    </section>
+
+    <section class="positions card">
+
+      <div class="section-head">
+
+        <div>
+
+          <div class="eyebrow">
+            ACCOUNT
+          </div>
+
+          <h2>
+            Open position
+          </h2>
+
+        </div>
+
+        <button
+          id="refreshBtn"
+          class="btn ghost small"
+          type="button"
+        >
+          REFRESH
+        </button>
+
+      </div>
+
+      <div
+        id="positionEmpty"
+        class="empty"
+      >
+        Log in and select an account.
+      </div>
+
+      <div
+        id="position"
+        class="position"
+      >
+
+        <div>
+          <span>CONTRACT ID</span>
+          <strong id="contractId">—</strong>
+        </div>
+
+        <div>
+          <span>STATUS</span>
+          <strong id="contractStatus">—</strong>
+        </div>
+
+        <div>
+          <span>P/L</span>
+          <strong id="contractProfit">—</strong>
+        </div>
+
+        <div>
+          <span>BUY PRICE</span>
+          <strong id="contractBuyPrice">—</strong>
+        </div>
+
+      </div>
+
+    </section>
+
+    <section class="log-card card">
+
+      <div class="section-head">
+
+        <h2>
+          Activity
+        </h2>
+
+        <button
+          id="clearLog"
+          class="btn ghost small"
+          type="button"
+        >
+          CLEAR
+        </button>
+
+      </div>
+
+      <pre id="log"></pre>
+
+    </section>
+
+  </main>
+
+  <footer>
+
+    TRADERS HUB • Built for Deriv API •
+
+    <a
+      href="https://developers.deriv.com/"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      API documentation
+    </a>
+
+  </footer>
+
+</div>
+
+<script src="/app.js"></script>
+
+</body>
+</html>
